@@ -6,6 +6,7 @@
 
 const express = require('express');
 const cors    = require('cors');
+const http    = require('http');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -29,7 +30,6 @@ app.use((req, res, next) => {
     path: req.path,
     ip: req.ip
   });
-  // Keep only last 1000 entries
   if (activityLog.length > 1000) activityLog.shift();
   next();
 });
@@ -44,12 +44,12 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Ping endpoint (simple response)
+// Ping endpoint
 app.get('/ping', (req, res) => {
   res.json({ pong: true, ts: Date.now() });
 });
 
-// Keep-alive endpoint (POST - generates write activity)
+// Keep-alive endpoint (POST - write activity)
 app.post('/keepalive', (req, res) => {
   const { source, ts } = req.body || {};
   res.json({
@@ -60,7 +60,7 @@ app.post('/keepalive', (req, res) => {
   });
 });
 
-// Status endpoint (detailed)
+// Status endpoint
 app.get('/status', (req, res) => {
   res.json({
     name: 'NoxExplorer Gateway',
@@ -89,14 +89,12 @@ app.get('/', (req, res) => {
   });
 });
 
-// Analyze endpoint (main functionality)
+// Analyze endpoint
 app.post('/analyze', (req, res) => {
   const { classes, game } = req.body;
   if (!classes || !Array.isArray(classes)) {
     return res.status(400).json({ error: 'classes array required' });
   }
-  
-  // For now, return a stub - real AI integration comes later
   res.json({
     code: '-- NoxExplorer generated stub\nprint("AI analysis pending - classes: ' + classes.length + '")',
     classes_analyzed: classes.length,
@@ -104,29 +102,21 @@ app.post('/analyze', (req, res) => {
   });
 });
 
-// Self-ping mechanism (the bug)
-// Pings itself every 2 minutes to generate activity and prevent sleep
+// Self-ping using built-in http (no external deps)
 setInterval(() => {
-  const selfPing = async () => {
-    try {
-      const fetch = (await import('node-fetch')).default;
-      const res = await fetch(`http://localhost:${PORT}/ping`, {
-        method: 'GET',
-        timeout: 5000
-      });
-      if (res.ok) {
-        console.log(`[self-ping] OK at ${new Date().toISOString()}`);
-      }
-    } catch (err) {
-      // Silent fail - self-ping is best effort
+  const opts = { hostname: '127.0.0.1', port: PORT, path: '/ping', method: 'GET', timeout: 5000 };
+  const req = http.request(opts, (res) => {
+    if (res.statusCode === 200) {
+      console.log(`[self-ping] OK at ${new Date().toISOString()}`);
     }
-  };
-  selfPing();
-}, 120_000); // Every 2 minutes
+  });
+  req.on('error', () => {});
+  req.on('timeout', () => { req.destroy(); });
+  req.end();
+}, 120_000);
 
-// Start server
 app.listen(PORT, () => {
   console.log(`[nox] Railway server running on :${PORT}`);
   console.log(`[nox] Self-ping active every 2 minutes`);
-  console.log(`[nox] Keep-alive endpoints: /health, /ping, /keepalive, /status`);
+  console.log(`[nox] Keep-alive endpoints: /health /ping /keepalive /status`);
 });

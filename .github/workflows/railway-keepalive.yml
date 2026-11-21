@@ -26,24 +26,13 @@ jobs:
       - name: Resolve Railway URL
         id: resolve
         run: |
-          # Try multiple sources for the Railway URL
           RAILWAY_URL=""
-          
-          # 1. Check Railway URL file in repo
           if [ -f railway_url.txt ]; then
             RAILWAY_URL=$(cat railway_url.txt | tr -d '[:space:]')
           fi
-          
-          # 2. Check env var (set in GitHub Secrets)
           if [ -z "$RAILWAY_URL" ] && [ -n "${{ secrets.RAILWAY_URL }}" ]; then
             RAILWAY_URL="${{ secrets.RAILWAY_URL }}"
           fi
-          
-          # 3. Check endpoint.txt as fallback
-          if [ -z "$RAILWAY_URL" ] && [ -f endpoint.txt ]; then
-            RAILWAY_URL=$(cat endpoint.txt | tr -d '[:space:]')
-          fi
-          
           echo "url=$RAILWAY_URL" >> $GITHUB_OUTPUT
           echo "[railway] Resolved URL: $RAILWAY_URL"
 
@@ -52,20 +41,15 @@ jobs:
         run: |
           URL="${{ steps.resolve.outputs.url }}"
           echo "[railway] Pinging $URL to keep service alive..."
-          
-          # Hit multiple endpoints to generate activity
           for endpoint in "/health" "/ping" "/keepalive" "/status" "/"; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$URL$endpoint" || echo "000")
             echo "[railway] $endpoint -> $STATUS"
             sleep 1
           done
-          
-          # POST to generate write activity
           curl -s -X POST "$URL/keepalive" \
             -H "Content-Type: application/json" \
             -d "{\"source\":\"github-actions\",\"ts\":\"$(date -u +%s)\"}" \
             --max-time 10 || true
-          
           echo "[railway] Ping complete - service should stay awake"
 
       - name: Update activity log
@@ -73,14 +57,8 @@ jobs:
         run: |
           URL="${{ steps.resolve.outputs.url }}"
           TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-          
-          # Append to activity log
           echo "$TIMESTAMP pinged $URL" >> activity.log
-          
-          # Keep only last 100 lines
           tail -100 activity.log > activity.tmp && mv activity.tmp activity.log
-          
-          # Commit if changed
           git config user.email "nox-bot@noxexplorer.local"
           git config user.name "NoxExplorer Bot"
           git add activity.log

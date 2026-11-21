@@ -9,3 +9,4 @@ cloudflared.exe
 *.dll
 .railway/
 .env
+package-railway.json

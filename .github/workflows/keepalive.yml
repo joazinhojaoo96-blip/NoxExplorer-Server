@@ -31,20 +31,6 @@ jobs:
       - name: Install server deps
         run: cd server && npm ci --prefer-offline 2>/dev/null || npm install
 
-      - name: Check llama endpoint health
-        id: health
-        run: |
-          EP=$(cat endpoint.txt 2>/dev/null || echo "")
-          echo "endpoint=$EP" >> $GITHUB_OUTPUT
-          if [ -n "$EP" ] && [ "$EP" != "https://placeholder.trycloudflare.com" ]; then
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$EP/health" || echo "000")
-            echo "llama_status=$STATUS" >> $GITHUB_OUTPUT
-            echo "[nox] llama at $EP status: $STATUS"
-          else
-            echo "llama_status=offline" >> $GITHUB_OUTPUT
-            echo "[nox] no endpoint configured"
-          fi
-
       - name: Run gateway server (background)
         run: |
           cd server && node index.js &
