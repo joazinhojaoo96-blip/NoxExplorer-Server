@@ -1,0 +1,43 @@
+name: Nox Chat Watch (bug end-to-end)
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+
+    steps:
+      - name: Real POST /chat probe
+        env:
+          BASE: ${{ secrets.RAILWAY_URL }}
+        run: |
+          BASE="${BASE:-https://noxexplorer-server-production.up.railway.app}"
+          body='{"messages":[{"role":"user","content":"responda apenas: PONG"}],"stream":false}'
+          code=$(curl -s -o resp.json -w "%{http_code}" --max-time 150 \
+            -X POST "$BASE/chat" -H "Content-Type: application/json" -d "$body")
+          echo "http=$code"
+          cat resp.json; echo
+          if [ "$code" = "402" ]; then
+            echo "limite gratuito no momento — gate saudavel, passando"
+            exit 0
+          fi
+          if [ "$code" != "200" ]; then
+            echo "chat quebrou (http $code)"
+            exit 1
+          fi
+          reply=$(python3 -c "import json;print(json.load(open('resp.json')).get('reply',''))" 2>/dev/null || true)
+          echo "reply=$reply"
+          if [ -z "$reply" ]; then
+            echo "resposta vazia"
+            exit 1
+          fi
+          echo "chat vivo"

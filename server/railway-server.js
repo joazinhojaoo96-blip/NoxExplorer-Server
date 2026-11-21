@@ -495,6 +495,8 @@ const NOX_SYSTEM = [
   'Você é Nox — a IA pessoal do seu criador. Nome: Nox.',
   'Estilo ChatGPT: vai direto ao ponto, sem preâmbulo, sem repetir a pergunta, sem despedidas.',
   'Raciocine rápido e curto, depois responda já — nada de ensaiar a resposta em voz alta.',
+  'Em problemas difíceis, resolva mentalmente em 1 a 3 passos curtos e só então entregue a resposta final.',
+  'Precisão acima de tudo: se não tiver certeza de algo, avise numa linha — nunca invente nome de API, número, citação ou fato.',
   'Idioma: português brasileiro por padrão; se o usuário escrever em outro idioma, responde nesse idioma.',
   'Use markdown quando ajudar: listas, negrito, blocos de código com a linguagem marcada.',
   'Personalidade: confiante, afiada, útil, com humor leve quando caber. Nunca diga que é assistente genérico — você é Nox.',
@@ -513,6 +515,15 @@ function sanitizeMessages(input) {
 
 function brainReady() {
   return Boolean(process.env.NOX_BRAIN_URL && process.env.NOX_BRAIN_KEY);
+}
+
+// câmbio de raciocínio: pergunta curta e casual = flash; qualquer coisa complexa = pensa direito
+function pickEffort(messages) {
+  const last = messages[messages.length - 1];
+  const t = (last && last.content) || '';
+  if (t.length > 140) return 'medium';
+  const complex = /código|code|program|analise|analisa|explique|matem|cálcul|calc|arquitet|estrat|implement|debug|compar|por que|porque|como funciona|desenh|refator|otimiz|plano|projeto|erro|bug|sql|regex|algoritmo/i;
+  return complex.test(t) ? 'medium' : 'low';
 }
 
 async function callBrain(messages, stream) {
@@ -544,8 +555,8 @@ async function callPollinations(messages, stream) {
       model: process.env.POLLI_MODEL || 'openai-fast',
       messages: [{ role: 'system', content: NOX_SYSTEM }, ...messages],
       temperature: 0.7,
-      max_tokens: 1200,
-      reasoning_effort: 'low',
+      max_tokens: 1600,
+      reasoning_effort: pickEffort(messages),
       stream: Boolean(stream),
       referrer: 'NoxExplorer'
     }),
@@ -553,7 +564,7 @@ async function callPollinations(messages, stream) {
   });
   if (r.status === 402) {
     const err = new Error('pollinations free limit');
-    err.retryAfter = 45;
+    err.retryAfter = Number(r.headers.get('retry-after')) || 45;
     throw err;
   }
   if (!r.ok) throw new Error('pollinations HTTP ' + r.status);
