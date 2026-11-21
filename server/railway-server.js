@@ -9,6 +9,7 @@
 const express = require('express');
 const cors    = require('cors');
 const http    = require('http');
+const path    = require('path');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -88,9 +89,10 @@ app.get('/activity', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     service: 'NoxExplorer AI Gateway',
-    version: '2.0.0',
-    endpoints: ['/health', '/ping', '/keepalive', '/status', '/activity', '/analyze', '/chat', '/brain-health'],
+    version: '3.0.0',
+    endpoints: ['/health', '/ping', '/keepalive', '/status', '/activity', '/analyze', '/chat', '/brain-health', '/nox.html'],
     chat: 'POST /chat {messages:[{role,content}], stream?:bool} -> SSE stream or {reply, provider}',
+    site: 'GET /nox.html — chat da Nox',
     ai: {
       primary: process.env.LLM_BASE_URL ? 'openai-compatible (env)' : 'pollinations (keyless)',
       fallback: 'template (always available)'
@@ -98,6 +100,10 @@ app.get('/', (req, res) => {
     note: 'This service stays awake via GitHub Actions keep-alive bug'
   });
 });
+
+// Nox chat UI served straight from the repo docs/
+app.get('/nox', (req, res) => res.redirect('/nox.html'));
+app.use(express.static(path.join(__dirname, '..', 'docs'), { index: false }));
 
 // =========================================================
 // PROMPT
