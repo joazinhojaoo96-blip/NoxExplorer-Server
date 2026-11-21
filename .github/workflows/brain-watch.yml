@@ -1,0 +1,57 @@
+name: Nox Brain Watch (bug de vigilia)
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check brain health
+        id: check
+        env:
+          BRAIN_URL: ${{ secrets.NOX_BRAIN_URL }}
+          BRAIN_KEY: ${{ secrets.NOX_BRAIN_KEY }}
+        run: |
+          if [ -z "$BRAIN_URL" ]; then
+            echo "skip=1" >> $GITHUB_OUTPUT
+            echo "sem segredo NOX_BRAIN_URL — pulando"
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 25 \
+            -H "Authorization: Bearer $BRAIN_KEY" "$BRAIN_URL/health" || echo 000)
+          echo "http=$code" >> $GITHUB_OUTPUT
+          if [ "$code" = "200" ] || [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            echo "alive=1" >> $GITHUB_OUTPUT
+            echo "brain vivo (http $code)"
+          else
+            echo "alive=0" >> $GITHUB_OUTPUT
+            echo "brain morto (http $code)"
+          fi
+
+      - name: Restart brain over SSH
+        if: steps.check.outputs.skip != '1' && steps.check.outputs.alive == '0'
+        env:
+          SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+          HOST: ${{ secrets.ORACLE_HOST }}
+        run: |
+          if [ -z "$SSH_KEY" ] || [ -z "$HOST" ]; then
+            echo "sem segredos ORACLE_SSH_KEY/ORACLE_HOST — so registrando a morte"
+            exit 0
+          fi
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/nox_key
+          chmod 600 ~/.ssh/nox_key
+          ssh -i ~/.ssh/nox_key -o StrictHostKeyChecking=no -o ConnectTimeout=15 \
+            "ubuntu@$HOST" \
+            "sudo systemctl restart nox-brain || sudo systemctl start nox-brain" \
+            && echo "reiniciado" || echo "falha ao reiniciar"
