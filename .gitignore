@@ -1,0 +1,8 @@
+*.gguf
+*.exe
+llama/
+bin/
+node_modules/
+*.log
+*.tmp
+.env

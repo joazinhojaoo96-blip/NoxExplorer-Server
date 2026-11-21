@@ -1,0 +1,67 @@
+name: NoxExplorer Keepalive
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install server deps
+        run: cd server && npm ci --prefer-offline 2>/dev/null || npm install
+
+      - name: Check llama endpoint health
+        id: health
+        run: |
+          EP=$(cat endpoint.txt 2>/dev/null || echo "")
+          echo "endpoint=$EP" >> $GITHUB_OUTPUT
+          if [ -n "$EP" ] && [ "$EP" != "https://placeholder.trycloudflare.com" ]; then
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$EP/health" || echo "000")
+            echo "llama_status=$STATUS" >> $GITHUB_OUTPUT
+            echo "[nox] llama at $EP status: $STATUS"
+          else
+            echo "llama_status=offline" >> $GITHUB_OUTPUT
+            echo "[nox] no endpoint configured"
+          fi
+
+      - name: Run gateway server (background)
+        run: |
+          cd server && node index.js &
+          echo $! > /tmp/server.pid
+          sleep 5
+          curl -s http://localhost:3000/health && echo " - server OK" || echo " - server failed"
+
+      - name: Hold slot alive
+        run: |
+          echo "[nox] holding runner slot..."
+          sleep 20400
+
+      - name: Self-trigger via empty commit (infinite loop bug)
+        if: always()
+        run: |
+          git config user.email "nox-bot@noxexplorer.local"
+          git config user.name "NoxExplorer Bot"
+          git pull --rebase origin main || true
+          git commit --allow-empty -m "keepalive: $(date -u '+%Y-%m-%dT%H:%M:%SZ') [skip ci-lint]"
+          git push origin main
