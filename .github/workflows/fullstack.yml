@@ -12,7 +12,6 @@ permissions:
   actions: write
 
 jobs:
-  # Job 1: Railway keep-alive bug (every run)
   railway-keepalive:
     runs-on: ubuntu-latest
     timeout-minutes: 5

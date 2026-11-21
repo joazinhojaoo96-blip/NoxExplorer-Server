@@ -10,3 +10,4 @@ cloudflared.exe
 .railway/
 .env
 package-railway.json
+activity.tmp

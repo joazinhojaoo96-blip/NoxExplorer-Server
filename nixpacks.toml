@@ -2,9 +2,7 @@
 nixPkgs = ["nodejs_20"]
 
 [phases.install]
-cwd = "/app/server"
-cmds = ["npm install --omit=dev"]
+cmds = ["cd server && npm install --omit=dev"]
 
 [start]
-cwd = "/app/server"
-cmd = "node railway-server.js"
+cmd = "cd server && node railway-server.js"

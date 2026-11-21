@@ -14,7 +14,7 @@ Railway free tier sleeps after 30 minutes of inactivity. The keep-alive bug prev
 
 ### 1. Railway Server (`server/railway-server.js`)
 - Express.js API gateway
-- Self-pinging mechanism (every 2 minutes)
+- Self-pinging mechanism (every 2 minutes, built-in http)
 - Keep-alive endpoints
 - Activity tracking
 
@@ -138,6 +138,7 @@ Every 3 minutes:
 | `server/railway-server.js` | API server with keep-alive |
 | `railway.json` | Railway configuration |
 | `railway_url.txt` | Your Railway URL |
+| `nixpacks.toml` | Nixpacks build config |
 | `.github/workflows/fullstack.yml` | Dual keep-alive workflows |
 | `docs/index.html` | Status dashboard |
 | `setup_railway.bat` | Windows setup script |
