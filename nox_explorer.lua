@@ -8,12 +8,14 @@
 -- =========================================================
 -- CONFIG
 -- =========================================================
-local REPO_RAW     = "https://raw.githubusercontent.com/joazinhojaoo96-blip/NoxExplorer-Server/main/endpoint.txt"
-local GATEWAY_PATH = "/analyze"
-local SCAN_DEPTH   = 4        -- how deep to follow __index chains
-local MAX_CLASSES  = 120      -- cap sent to AI (avoid token overflow)
-local GAME_NAME    = game and tostring(game.Name) or "unknown"
-local HTTP         = syn and syn.request or (http and http.request) or request
+local REPO_RAW         = "https://raw.githubusercontent.com/joazinhojaoo96-blip/NoxExplorer-Server/main/endpoint.txt"
+local RAILWAY_RAW      = "https://raw.githubusercontent.com/joazinhojaoo96-blip/NoxExplorer-Server/main/railway_url.txt"
+local GATEWAY_PATH     = "/analyze"
+local SCAN_DEPTH       = 4        -- how deep to follow __index chains
+local MAX_CLASSES      = 120      -- cap sent to AI (avoid token overflow)
+local GAME_NAME        = game and tostring(game.Name) or "unknown"
+local HTTP             = syn and syn.request or (http and http.request) or request
+local USE_RAILWAY      = true     -- prefer Railway over Cloudflare tunnel
 -- =========================================================
 
 local nox = {}
@@ -66,20 +68,37 @@ end
 
 -- =========================================================
 -- ENDPOINT RESOLVER
--- Reads endpoint.txt from GitHub raw URL
+-- Reads endpoint from GitHub raw URL (Railway or Cloudflare)
 -- =========================================================
 function nox.resolve_endpoint()
   print("[nox] Fetching endpoint from GitHub...")
+  
+  -- Try Railway first (preferred)
+  if USE_RAILWAY then
+    local railway_body = http_get(RAILWAY_RAW)
+    if railway_body then
+      local url = railway_body:match("(https?://[^\r\n]+)")
+      if url and url ~= "https://your-railway-app.up.railway.app" then
+        nox.endpoint = url
+        print("[nox] Railway endpoint resolved: " .. url)
+        return url
+      end
+    end
+  end
+  
+  -- Fallback to Cloudflare tunnel
   local body = http_get(REPO_RAW)
   if body then
     local url = body:match("(https?://[^\r\n]+)")
     if url and url ~= "https://placeholder.trycloudflare.com" then
       nox.endpoint = url
-      print("[nox] Endpoint resolved: " .. url)
+      print("[nox] Cloudflare endpoint resolved: " .. url)
       return url
     end
   end
-  warn("[nox] Could not resolve endpoint. Is llama running and tunnel active?")
+  
+  warn("[nox] Could not resolve endpoint. Is Railway deployed?")
+  warn("[nox] Run setup_railway.bat to deploy")
   return nil
 end
 

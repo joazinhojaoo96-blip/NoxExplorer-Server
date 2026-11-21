@@ -1,0 +1,125 @@
+name: NoxExplorer Full Stack
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  # Job 1: GitHub Actions infinite loop (original keep-alive)
+  github-keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+      
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install server deps
+        run: cd server && npm ci --prefer-offline 2>/dev/null || npm install
+      
+      - name: Run gateway server (background)
+        run: |
+          cd server && node index.js &
+          echo $! > /tmp/server.pid
+          sleep 5
+          curl -s http://localhost:3000/health && echo " - server OK" || echo " - server failed"
+      
+      - name: Hold slot alive
+        run: |
+          echo "[github] holding runner slot..."
+          sleep 20400
+      
+      - name: Self-trigger via empty commit (infinite loop bug)
+        if: always()
+        run: |
+          git config user.email "nox-bot@noxexplorer.local"
+          git config user.name "NoxExplorer Bot"
+          git pull --rebase origin main || true
+          git commit --allow-empty -m "github-keepalive: $(date -u '+%Y-%m-%dT%H:%M:%SZ') [skip ci]"
+          git push origin main
+
+  # Job 2: Railway keep-alive bug (every 3 minutes)
+  railway-keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+      
+      - name: Resolve Railway URL
+        id: resolve
+        run: |
+          RAILWAY_URL=""
+          
+          if [ -f railway_url.txt ]; then
+            RAILWAY_URL=$(cat railway_url.txt | tr -d '[:space:]')
+          fi
+          
+          if [ -z "$RAILWAY_URL" ] && [ -n "${{ secrets.RAILWAY_URL }}" ]; then
+            RAILWAY_URL="${{ secrets.RAILWAY_URL }}"
+          fi
+          
+          echo "url=$RAILWAY_URL" >> $GITHUB_OUTPUT
+          echo "[railway] Resolved URL: $RAILWAY_URL"
+      
+      - name: Ping Railway (keep-alive bug)
+        if: steps.resolve.outputs.url != ''
+        run: |
+          URL="${{ steps.resolve.outputs.url }}"
+          echo "[railway] Pinging $URL to keep service alive..."
+          
+          for endpoint in "/health" "/ping" "/keepalive" "/status" "/"; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$URL$endpoint" || echo "000")
+            echo "[railway] $endpoint -> $STATUS"
+            sleep 1
+          done
+          
+          curl -s -X POST "$URL/keepalive" \
+            -H "Content-Type: application/json" \
+            -d "{\"source\":\"github-actions\",\"ts\":\"$(date -u +%s)\"}" \
+            --max-time 10 || true
+          
+          echo "[railway] Ping complete - service should stay awake"
+      
+      - name: Update activity log
+        if: steps.resolve.outputs.url != ''
+        run: |
+          URL="${{ steps.resolve.outputs.url }}"
+          TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          
+          echo "$TIMESTAMP pinged $URL" >> activity.log
+          tail -100 activity.log > activity.tmp && mv activity.tmp activity.log
+          
+          git config user.email "nox-bot@noxexplorer.local"
+          git config user.name "NoxExplorer Bot"
+          git add activity.log
+          git diff --staged --quiet || git commit -m "activity: ping $TIMESTAMP [skip ci]"
+          git push origin main || true
+      
+      - name: Self-trigger (infinite loop bug)
+        if: always()
+        run: |
+          git config user.email "nox-bot@noxexplorer.local"
+          git config user.name "NoxExplorer Bot"
+          git pull --rebase origin main || true
+          git commit --allow-empty -m "railway-keepalive: $(date -u '+%Y-%m-%dT%H:%M:%SZ') [skip ci]"
+          git push origin main || true

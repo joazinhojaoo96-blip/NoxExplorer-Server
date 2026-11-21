@@ -1,0 +1,14 @@
+# NoxExplorer Activity Log
+
+This file is automatically updated by the GitHub Actions keep-alive workflow.
+
+Format: `TIMESTAMP ACTION DETAILS`
+
+Example:
+```
+2026-11-20T12:00:00Z pinged https://your-app.up.railway.app
+2026-11-20T12:03:00Z pinged https://your-app.up.railway.app
+2026-11-20T12:06:00Z pinged https://your-app.up.railway.app
+```
+
+The log keeps only the last 100 entries.
