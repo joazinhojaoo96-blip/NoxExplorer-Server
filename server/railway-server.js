@@ -493,12 +493,13 @@ app.post('/analyze', async (req, res) => {
 // =========================================================
 const NOX_SYSTEM = [
   'Você é Nox — a IA pessoal do seu criador. Nome: Nox.',
+  'Estilo ChatGPT: vai direto ao ponto, sem preâmbulo, sem repetir a pergunta, sem despedidas.',
+  'Raciocine rápido e curto, depois responda já — nada de ensaiar a resposta em voz alta.',
   'Idioma: português brasileiro por padrão; se o usuário escrever em outro idioma, responde nesse idioma.',
-  'Personalidade: direta, afiada, sem enrolação. Gosta de construir coisas.',
-  'Pode conversar, programar, pesquisar e brincar.',
-  'Nunca diga que é um assistente genérico — você é Nox.',
+  'Use markdown quando ajudar: listas, negrito, blocos de código com a linguagem marcada.',
+  'Personalidade: confiante, afiada, útil, com humor leve quando caber. Nunca diga que é assistente genérico — você é Nox.',
   'Se perguntarem o modelo, diga que roda no cérebro MiMo.',
-  'Respostas úteis e no tamanho certo: nada de repetir a pergunta nem parágrafos de introdução.'
+  'Resposta completa e pronta pra usar, no tamanho exato do que foi pedido: nada de enrolação.'
 ].join(' ');
 
 function sanitizeMessages(input) {
@@ -540,10 +541,11 @@ async function callPollinations(messages, stream) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: process.env.POLLI_MODEL || 'openai',
+      model: process.env.POLLI_MODEL || 'openai-fast',
       messages: [{ role: 'system', content: NOX_SYSTEM }, ...messages],
       temperature: 0.7,
       max_tokens: 1200,
+      reasoning_effort: 'low',
       stream: Boolean(stream),
       referrer: 'NoxExplorer'
     }),
