@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nox — Chat</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0a0912; --panel: #12101d; --panel2: #171427; --line: #262140;
+    --violet: #8b5cf6; --cyan: #22d3ee; --text: #e7e5f4; --dim: #8b86a8;
+  }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(900px 500px at 15% -10%, rgba(139,92,246,.22), transparent 60%),
+      radial-gradient(800px 500px at 90% 110%, rgba(34,211,238,.12), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  header {
+    width: 100%; max-width: 860px;
+    padding: 18px 20px 12px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .logo {
+    font-size: 26px; font-weight: 800; letter-spacing: 4px;
+    background: linear-gradient(90deg, var(--violet), var(--cyan));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tag { color: var(--dim); font-size: 12px; margin-top: 3px; }
+  .spacer { flex: 1; }
+  .pill {
+    font-size: 11px; padding: 5px 10px; border-radius: 999px;
+    background: var(--panel2); border: 1px solid var(--line); color: var(--dim);
+    display: flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--violet); }
+  .dot.up { background: #34d399; box-shadow: 0 0 6px #34d399; }
+  .dot.down { background: #fbbf24; }
+  a.mini {
+    color: var(--dim); text-decoration: none; font-size: 12px;
+    border: 1px solid var(--line); padding: 5px 10px; border-radius: 8px;
+  }
+  a.mini:hover { color: var(--text); border-color: var(--violet); }
+  #chat {
+    width: 100%; max-width: 860px; flex: 1;
+    overflow-y: auto; padding: 10px 20px 20px;
+    display: flex; flex-direction: column; gap: 14px;
+    scroll-behavior: smooth;
+  }
+  #empty { margin: auto; text-align: center; color: var(--dim); }
+  #empty .big {
+    font-size: 64px; font-weight: 800; letter-spacing: 10px;
+    background: linear-gradient(90deg, var(--violet), var(--cyan));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    opacity: .8;
+  }
+  #empty p { margin-top: 10px; font-size: 14px; }
+  .msg { max-width: 78%; display: flex; flex-direction: column; gap: 4px; }
+  .msg.user { align-self: flex-end; align-items: flex-end; }
+  .msg.nox { align-self: flex-start; align-items: flex-start; }
+  .bubble {
+    padding: 11px 15px; border-radius: 16px; font-size: 14.5px;
+    line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+  }
+  .user .bubble {
+    background: linear-gradient(135deg, #6d28d9, #7c3aed);
+    border-bottom-right-radius: 4px;
+  }
+  .nox .bubble {
+    background: var(--panel); border: 1px solid var(--line);
+    border-bottom-left-radius: 4px;
+  }
+  .thinking {
+    font-size: 12.5px; font-style: italic; color: #6b668a;
+    padding: 2px 6px; white-space: pre-wrap; word-break: break-word;
+    max-width: 100%;
+  }
+  .meta { font-size: 10.5px; color: #57527a; padding: 0 6px; }
+  .bubble code {
+    background: #0c0a14; border: 1px solid var(--line);
+    padding: 1px 5px; border-radius: 5px; font-size: 13px;
+    font-family: ui-monospace, Consolas, monospace;
+  }
+  .bubble pre {
+    background: #0c0a14; border: 1px solid var(--line);
+    padding: 10px 12px; border-radius: 10px; overflow-x: auto;
+    margin: 6px 0; white-space: pre;
+  }
+  .bubble pre code { background: none; border: none; padding: 0; }
+  .cursor {
+    display: inline-block; width: 7px; height: 15px;
+    background: var(--cyan); vertical-align: text-bottom;
+    animation: blink .8s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  #composer-wrap {
+    width: 100%; max-width: 860px; padding: 12px 20px 22px;
+    background: linear-gradient(180deg, transparent, var(--bg) 30%);
+    position: sticky; bottom: 0;
+  }
+  #composer {
+    display: flex; gap: 10px; align-items: flex-end;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 18px; padding: 10px 12px;
+    transition: border-color .15s;
+  }
+  #composer:focus-within { border-color: var(--violet); }
+  #input {
+    flex: 1; background: none; border: none; outline: none; resize: none;
+    color: var(--text); font-size: 15px; font-family: inherit;
+    line-height: 1.5; max-height: 160px; min-height: 24px;
+  }
+  #input::placeholder { color: #57527a; }
+  button { border: none; cursor: pointer; font-family: inherit; font-weight: 600; }
+  #send {
+    background: linear-gradient(135deg, var(--violet), #6d28d9);
+    color: #fff; border-radius: 12px; padding: 9px 16px; font-size: 14px;
+    transition: opacity .15s, transform .1s;
+  }
+  #send:hover { opacity: .9; }
+  #send:active { transform: scale(.97); }
+  #send:disabled { opacity: .4; cursor: not-allowed; }
+  #send.stop { background: #3f3f5a; }
+  #newchat {
+    background: none; color: var(--dim); font-size: 12px;
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 7px 12px; margin-right: 2px;
+  }
+  #newchat:hover { color: var(--text); border-color: var(--violet); }
+  #hint { font-size: 11px; color: #57527a; text-align: center; margin-top: 8px; }
+  #toast {
+    position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #1c1830; border: 1px solid var(--line); color: var(--text);
+    padding: 10px 18px; border-radius: 12px; font-size: 13.5px;
+    opacity: 0; pointer-events: none; transition: all .25s; z-index: 50;
+    max-width: 90%; text-align: center;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  @media (max-width: 640px) {
+    .msg { max-width: 92%; }
+    .tag { display: none; }
+    .logo { font-size: 21px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">NOX</div>
+    <div class="tag">cérebro MiMo · sempre ligada</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="pill"><span class="dot" id="statusDot"></span><span id="statusText">verificando…</span></div>
+  <a class="mini" href="index.html">dashboard</a>
+</header>
+<div id="chat">
+  <div id="empty">
+    <div class="big">NOX</div>
+    <p>pergunta qualquer coisa</p>
+  </div>
+</div>
+<div id="composer-wrap">
+  <div id="composer">
+    <button id="newchat">nova conversa</button>
+    <textarea id="input" rows="1" placeholder="fala com a Nox…"></textarea>
+    <button id="send">enviar</button>
+  </div>
+  <div id="hint">enter envia · shift+enter quebra linha</div>
+</div>
+<div id="toast"></div>
+<script>
+const RAILWAY = 'https://noxexplorer-server-production.up.railway.app';
+const STORE_KEY = 'nox-chat-v1';
+const PROVIDER_META = {
+  brain: 'MiMo-V2.6 · cérebro local',
+  pollinations: 'Nox · nuvem gratuita'
+};
+const chatEl = document.getElementById('chat');
+const emptyEl = document.getElementById('empty');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const newBtn = document.getElementById('newchat');
+const toastEl = document.getElementById('toast');
+let messages = [];
+try { messages = JSON.parse(localStorage.getItem(STORE_KEY)) || []; } catch (_) {}
+let controller = null;
+let lockUntil = 0;
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function fmt(s) {
+  let h = esc(s);
+  const blocks = [];
+  h = h.replace(/```(?:\w+)?\n?([\s\S]*?)```/g, function(_, code) {
+    blocks.push('<pre><code>' + code.replace(/\n$/, '') + '</code></pre>');
+    return '@@B' + (blocks.length - 1) + '@@';
+  });
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  h = h.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  h = h.replace(/@@B(\d+)@@/g, function(_, i) { return blocks[+i] || ''; });
+  return h;
+}
+function toast(msg, ms) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(function() { toastEl.classList.remove('show'); }, ms || 4000);
+}
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(messages.slice(-60))); } catch (_) {}
+}
+function scroll() {
+  requestAnimationFrame(function() { chatEl.scrollTop = chatEl.scrollHeight; });
+}
+function setSending(on) {
+  if (on) {
+    sendBtn.textContent = 'parar';
+    sendBtn.classList.add('stop');
+    sendBtn.disabled = false;
+    return;
+  }
+  sendBtn.textContent = 'enviar';
+  sendBtn.classList.remove('stop');
+  const locked = Date.now() < lockUntil;
+  sendBtn.disabled = locked || !inputEl.value.trim();
+  if (locked) {
+    const left = Math.ceil((lockUntil - Date.now()) / 1000);
+    sendBtn.textContent = 'espera ' + left + 's';
+    setTimeout(function() { setSending(false); }, 1000);
+  }
+}
+function bubble(role, text) {
+  emptyEl.style.display = 'none';
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + (role === 'user' ? 'user' : 'nox');
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.innerHTML = role === 'user' ? esc(text) : fmt(text);
+  wrap.appendChild(b);
+  chatEl.appendChild(wrap);
+  scroll();
+  return wrap;
+}
+function renderHistory() {
+  chatEl.innerHTML = '';
+  if (!messages.length) {
+    chatEl.appendChild(emptyEl);
+    emptyEl.style.display = '';
+    return;
+  }
+  for (var i = 0; i < messages.length; i++) bubble(messages[i].role, messages[i].content);
+}
+async function loadStatus() {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  try {
+    const r = await fetch(RAILWAY + '/status', { cache: 'no-store' });
+    const j = await r.json();
+    const b = j.brain || {};
+    if (b.configured && b.status === 'up') {
+      dot.className = 'dot up'; txt.textContent = 'cérebro ligado';
+    } else if (b.configured) {
+      dot.className = 'dot down'; txt.textContent = 'cérebro dormindo · fallback ativo';
+    } else {
+      dot.className = 'dot'; txt.textContent = 'nox online · nuvem';
+    }
+  } catch (_) {
+    dot.className = 'dot down'; txt.textContent = 'gateway offline';
+  }
+}
+loadStatus();
+setInterval(loadStatus, 30000);
+
+async function send() {
+  if (controller) { controller.abort(); return; }
+  const text = inputEl.value.trim();
+  if (!text || Date.now() < lockUntil) return;
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+  messages.push({ role: 'user', content: text });
+  save();
+  bubble('user', text);
+
+  const noxWrap = document.createElement('div');
+  noxWrap.className = 'msg nox';
+  const think = document.createElement('div');
+  think.className = 'thinking';
+  const body = document.createElement('div');
+  body.className = 'bubble';
+  body.innerHTML = '<span class="cursor"></span>';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  noxWrap.appendChild(think);
+  noxWrap.appendChild(body);
+  noxWrap.appendChild(meta);
+  chatEl.appendChild(noxWrap);
+  scroll();
+
+  controller = new AbortController();
+  setSending(true);
+  let full = '';
+  let provider = null;
+  let buffer = '';
+  let firstDelta = true;
+
+  try {
+    const r = await fetch(RAILWAY + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: messages.slice(0, -1), stream: true }),
+      signal: controller.signal
+    });
+    if (!r.ok) {
+      let err = 'a Nox travou um pouco. tenta de novo.';
+      try {
+        const j = await r.json();
+        if (j.error) err = j.error;
+        if (j.retryAfter) { lockUntil = Date.now() + j.retryAfter * 1000; setSending(false); }
+      } catch (_) {}
+      think.remove();
+      body.innerHTML = fmt(err);
+      meta.textContent = 'erro';
+      controller = null;
+      setSending(false);
+      return;
+    }
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let done = false;
+    while (!done) {
+      const res = await reader.read();
+      if (res.done) break;
+      buffer += dec.decode(res.value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf('\n\n')) >= 0) {
+        const block = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        const lines = block.split('\n');
+        for (var li = 0; li < lines.length; li++) {
+          const line = lines[li];
+          if (line.indexOf('data:') !== 0) continue;
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') { done = true; break; }
+          let j;
+          try { j = JSON.parse(data); } catch (_) { continue; }
+          if (j.provider) {
+            provider = j.provider;
+            meta.textContent = PROVIDER_META[j.provider] || j.provider;
+            continue;
+          }
+          const choice = j.choices && j.choices[0];
+          const delta = choice && choice.delta;
+          if (!delta) continue;
+          const reasoning = delta.reasoning || delta.reasoning_content;
+          if (reasoning) {
+            think.textContent = (think.textContent || '') + reasoning;
+            scroll();
+          }
+          if (delta.content) {
+            if (firstDelta) { think.textContent = ''; firstDelta = false; }
+            full += delta.content;
+            body.innerHTML = fmt(full) + '<span class="cursor"></span>';
+            scroll();
+          }
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      if (think.parentNode) think.remove();
+      body.innerHTML = fmt(full || 'conexão caiu. tenta de novo.');
+    }
+  } finally {
+    if (full) {
+      think.textContent = '';
+      body.innerHTML = fmt(full);
+      messages.push({ role: 'assistant', content: full });
+      save();
+    } else if (controller && controller.signal.aborted) {
+      noxWrap.remove();
+      messages.pop();
+      save();
+    }
+    if (!meta.textContent) meta.textContent = provider ? (PROVIDER_META[provider] || provider) : '';
+    controller = null;
+    setSending(false);
+    scroll();
+  }
+}
+sendBtn.addEventListener('click', send);
+inputEl.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+inputEl.addEventListener('input', function() {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + 'px';
+  if (!controller) setSending(false);
+});
+newBtn.addEventListener('click', function() {
+  if (controller) controller.abort();
+  messages = [];
+  save();
+  renderHistory();
+  inputEl.focus();
+});
+renderHistory();
+setSending(false);
+inputEl.focus();
+</script>
+</body>
+</html>
