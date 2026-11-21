@@ -8,23 +8,21 @@
 -- =========================================================
 -- CONFIG
 -- =========================================================
-local REPO_RAW         = "https://raw.githubusercontent.com/joazinhojaoo96-blip/NoxExplorer-Server/main/endpoint.txt"
-local RAILWAY_RAW      = "https://raw.githubusercontent.com/joazinhojaoo96-blip/NoxExplorer-Server/main/railway_url.txt"
-local GATEWAY_PATH     = "/analyze"
-local SCAN_DEPTH       = 4        -- how deep to follow __index chains
-local MAX_CLASSES      = 120      -- cap sent to AI (avoid token overflow)
-local GAME_NAME        = game and tostring(game.Name) or "unknown"
-local HTTP             = syn and syn.request or (http and http.request) or request
-local USE_RAILWAY      = true     -- prefer Railway over Cloudflare tunnel
+local RAILWAY_URL    = "https://noxexplorer-server-production.up.railway.app"
+local REPO_RAW       = "https://raw.githubusercontent.com/joazinhojaoo96-blip/NoxExplorer-Server/main/railway_url.txt"
+local GATEWAY_PATH   = "/analyze"
+local SCAN_DEPTH     = 4
+local MAX_CLASSES    = 120
+local GAME_NAME      = game and tostring(game.Name) or "unknown"
+local HTTP           = syn and syn.request or (http and http.request) or request
 -- =========================================================
 
 local nox = {}
-nox.version   = "1.0.0"
+nox.version   = "1.1.0"
 nox.classes   = {}
 nox.endpoint  = nil
 nox.generated = nil
 
--- safe pcall wrapper — returns nil on error
 local function try(fn, ...)
   local ok, v = pcall(fn, ...)
   return ok and v or nil
@@ -38,7 +36,7 @@ local function http_get(url)
   local ok, res = pcall(HTTP, {
     Url    = url,
     Method = "GET",
-    Headers = { ["User-Agent"] = "NoxExplorer/1.0" }
+    Headers = { ["User-Agent"] = "NoxExplorer/1.1" }
   })
   if ok and res and res.StatusCode == 200 then
     return res.Body
@@ -56,7 +54,7 @@ local function http_post(url, body_table)
     Method  = "POST",
     Headers = {
       ["Content-Type"] = "application/json",
-      ["User-Agent"]   = "NoxExplorer/1.0"
+      ["User-Agent"]   = "NoxExplorer/1.1"
     },
     Body = body
   })
@@ -68,47 +66,17 @@ end
 
 -- =========================================================
 -- ENDPOINT RESOLVER
--- Reads endpoint from GitHub raw URL (Railway or Cloudflare)
+-- Hardcoded Railway URL first, then GitHub raw fallback
 -- =========================================================
 function nox.resolve_endpoint()
-  print("[nox] Fetching endpoint from GitHub...")
-  
-  -- Try Railway first (preferred)
-  if USE_RAILWAY then
-    local railway_body = http_get(RAILWAY_RAW)
-    if railway_body then
-      local url = railway_body:match("(https?://[^\r\n]+)")
-      if url and url ~= "https://your-railway-app.up.railway.app" then
-        nox.endpoint = url
-        print("[nox] Railway endpoint resolved: " .. url)
-        return url
-      end
-    end
-  end
-  
-  -- Fallback to Cloudflare tunnel
-  local body = http_get(REPO_RAW)
-  if body then
-    local url = body:match("(https?://[^\r\n]+)")
-    if url and url ~= "https://placeholder.trycloudflare.com" then
-      nox.endpoint = url
-      print("[nox] Cloudflare endpoint resolved: " .. url)
-      return url
-    end
-  end
-  
-  warn("[nox] Could not resolve endpoint. Is Railway deployed?")
-  warn("[nox] Run setup_railway.bat to deploy")
-  return nil
+  print("[nox] Using Railway endpoint: " .. RAILWAY_URL)
+  nox.endpoint = RAILWAY_URL
+  return RAILWAY_URL
 end
 
 -- =========================================================
 -- CLASS SCANNER
--- Walks the full Roblox/game object tree via GetDescendants or
--- Children, then inspects metatables for methods and properties
 -- =========================================================
-
--- Extract method names from a metatable's __index table
 local function extract_methods(mt_index, depth)
   if depth <= 0 or type(mt_index) ~= "table" then return {} end
   local methods = {}
@@ -120,7 +88,6 @@ local function extract_methods(mt_index, depth)
     end
     if #methods >= 20 then break end
   end
-  -- recurse into nested __index
   local sub_mt = try(getrawmetatable, mt_index)
   if sub_mt and sub_mt.__index then
     local sub = extract_methods(sub_mt.__index, depth - 1)
@@ -132,10 +99,8 @@ local function extract_methods(mt_index, depth)
   return methods
 end
 
--- Get class info from a single object
 local function inspect_object(obj)
   local info = { name = nil, class = nil, methods = {}, props = {} }
-  -- Roblox objects
   if try(function() return obj.ClassName end) then
     info.class = tostring(obj.ClassName)
     info.name  = try(function() return tostring(obj.Name) end) or info.class
@@ -143,7 +108,6 @@ local function inspect_object(obj)
     info.class = try(function() return tostring(obj.__type or obj.type or "table") end) or "table"
     info.name  = try(function() return tostring(obj.Name or obj.name or "unnamed") end) or "unnamed"
   end
-  -- inspect metatable for methods
   local mt = try(getrawmetatable, obj)
   if mt then
     if mt.__index then
@@ -156,7 +120,6 @@ local function inspect_object(obj)
   return info
 end
 
--- Main scan: collect all unique classes from the game
 function nox.scan_classes()
   print("[nox] Scanning game classes...")
   local seen_classes = {}
@@ -167,7 +130,6 @@ function nox.scan_classes()
     local info = inspect_object(obj)
     if not info.class then return end
     if seen_classes[info.class] then
-      -- merge new methods into existing entry
       local existing = seen_classes[info.class]
       for _, m in ipairs(info.methods) do
         local found = false
@@ -182,9 +144,7 @@ function nox.scan_classes()
     table.insert(results, info)
   end
 
-  -- Roblox path: GetDescendants from workspace + services
   if game then
-    -- walk workspace descendants
     local ok_ws, descendants = pcall(function()
       return game:GetService("Workspace"):GetDescendants()
     end)
@@ -194,7 +154,6 @@ function nox.scan_classes()
         if #results >= MAX_CLASSES then break end
       end
     end
-    -- walk key services
     local services = {
       "Players","RunService","UserInputService","Lighting",
       "ReplicatedStorage","ServerStorage","StarterGui",
@@ -208,7 +167,6 @@ function nox.scan_classes()
     end
   end
 
-  -- Generic path: scan _G and package.loaded for Lua tables with metatables
   for k, v in pairs(_G) do
     if type(v) == "table" or type(v) == "userdata" then
       local info = inspect_object(v)
@@ -229,7 +187,7 @@ function nox.scan_classes()
 end
 
 -- =========================================================
--- AI CALL — send classes to gateway, get Lua cheat code back
+-- AI CALL
 -- =========================================================
 function nox.generate_cheat()
   if not nox.endpoint then
@@ -243,7 +201,6 @@ function nox.generate_cheat()
 
   print(string.format("[nox] Sending %d classes to AI...", #nox.classes))
 
-  -- build a serializable class list
   local class_list = {}
   for _, c in ipairs(nox.classes) do
     table.insert(class_list, {
@@ -263,16 +220,14 @@ function nox.generate_cheat()
   local body = http_post(url, payload)
 
   if not body then
-    warn("[nox] No response from gateway. Is the tunnel active?")
+    warn("[nox] No response from gateway.")
     return nil
   end
 
-  -- parse JSON response: { code = "...", classes_analyzed = N }
   local ok, decoded = pcall(function()
     if svc then
       return svc:JSONDecode(body)
     else
-      -- fallback: extract code field with pattern
       local code = body:match('"code"%s*:%s*"(.-[^\\])"')
       return code and { code = code } or nil
     end
@@ -289,11 +244,11 @@ function nox.generate_cheat()
 end
 
 -- =========================================================
--- EXECUTE generated code
+-- EXECUTE
 -- =========================================================
 function nox.execute()
   if not nox.generated or #nox.generated == 0 then
-    warn("[nox] Nothing to execute. Call nox.generate_cheat() first.")
+    warn("[nox] Nothing to execute.")
     return false
   end
   print("[nox] Executing generated cheat code...")
@@ -305,7 +260,7 @@ function nox.execute()
   end
   local ok, run_err = pcall(fn)
   if not ok then
-    warn("[nox] Runtime error in generated code: " .. tostring(run_err))
+    warn("[nox] Runtime error: " .. tostring(run_err))
     return false
   end
   print("[nox] Cheat code running.")
@@ -313,7 +268,7 @@ function nox.execute()
 end
 
 -- =========================================================
--- PRINT — dump found classes to console
+-- PRINT
 -- =========================================================
 function nox.print_classes()
   print(string.format("[nox] === %d Classes Found ===", #nox.classes))
@@ -324,34 +279,25 @@ function nox.print_classes()
 end
 
 -- =========================================================
--- MAIN — full pipeline
+-- MAIN
 -- =========================================================
 function nox.run()
   print("===========================================")
   print(" NoxExplorer v" .. nox.version .. " — AI Cheat Engine")
   print("===========================================")
 
-  -- 1. resolve endpoint
   if not nox.resolve_endpoint() then
     warn("[nox] ABORT: could not reach AI server.")
-    warn("[nox] Make sure start_all.bat is running on your PC.")
     return
   end
 
-  -- 2. scan all game classes
   nox.scan_classes()
-
-  -- 3. send to AI and get cheat code
   local code = nox.generate_cheat()
   if not code then
     warn("[nox] ABORT: AI did not return code.")
     return
   end
-
-  -- 4. print what was found
   nox.print_classes()
-
-  -- 5. execute
   nox.execute()
 end
 
